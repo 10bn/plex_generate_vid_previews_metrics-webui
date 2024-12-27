@@ -1,0 +1,38 @@
+<!-- src/metrics/templates/metrics.html -->
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Plex Preview Generation Metrics</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        th { background-color: #f2f2f2; }
+        tr:nth-child(even){background-color: #f9f9f9;}
+    </style>
+</head>
+<body>
+    <h1>Plex Preview Generation Metrics</h1>
+    <table>
+        <tr>
+            <th>ID</th>
+            <th>Video File</th>
+            <th>Hardware Accel</th>
+            <th>Time (s)</th>
+            <th>Speed (x)</th>
+            <th>Timestamp</th>
+        </tr>
+        {% for metric in metrics %}
+        <tr>
+            <td>{{ metric[0] }}</td>
+            <td>{{ metric[1] }}</td>
+            <td>{{ "Yes" if metric[2] else "No" }}</td>
+            <td>{{ metric[3] }}</td>
+            <td>{{ metric[4] }}</td>
+            <td>{{ metric[5] }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>

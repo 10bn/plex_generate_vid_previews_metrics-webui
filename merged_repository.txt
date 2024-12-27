@@ -1,0 +1,1008 @@
+File and Folder Structure:
+===========================
+.env
+requirements.txt
+.gitignore
+docker/Dockerfile
+docs/README.md
+src/plex/generator.py
+src/plex/__init__.py
+src/metrics/webserver.py
+src/metrics/db.py
+src/metrics/__init__.py
+src/metrics/templates/metrics.html
+src/config/__init__.py
+src/config/settings.py
+src/config/logger.py
+.devcontainer/Dockerfile.dev
+.devcontainer/devcontainer.json
+.github/workflows/docker-image.yml
+logs/app.log
+scripts/merge.py
+config/.env.example
+
+
+===== .env =====
+# .env
+
+PLEX_URL=http://localhost:32400
+PLEX_TOKEN=your_plex_token
+PLEX_BIF_FRAME_INTERVAL=5
+THUMBNAIL_QUALITY=4
+PLEX_LOCAL_MEDIA_PATH=/path_to/plex/Library/Application Support/Plex Media Server/Media
+TMP_FOLDER=/dev/shm/plex_generate_previews
+PLEX_TIMEOUT=60
+PLEX_LOCAL_VIDEOS_PATH_MAPPING=
+PLEX_VIDEOS_PATH_MAPPING=
+GPU_THREADS=4
+CPU_THREADS=4
+LOG_LEVEL=INFO
+
+
+===== requirements.txt =====
+pymediainfo
+gpustat
+requests
+plexapi
+loguru
+rich
+fastapi
+uvicorn
+pynvml
+amdsmi
+python-dotenv
+jinja2
+
+
+===== .gitignore =====
+.env
+
+
+
+===== docker/Dockerfile =====
+FROM linuxserver/ffmpeg:7.0.1
+
+# Install Python and pip
+RUN apt-get update && apt-get install -y \
+    mediainfo \
+    software-properties-common \
+    gcc \
+    musl-dev \
+    python3 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Copy the requirements.txt file to the working directory
+COPY requirements.txt .
+
+# Install the Python dependencies
+ENV PIP_BREAK_SYSTEM_PACKAGES 1
+RUN pip3 install --user -r requirements.txt
+
+# Ensure the Python user base binary directory is in PATH
+ENV PATH="/root/.local/bin:${PATH}"
+
+# Copy the Python script and .env file to the working directory
+COPY src/plex_generate_previews.py .
+COPY config/.env.example .env
+
+# Set environment variables from .env file
+RUN pip3 install --user python-dotenv
+
+# Run the Python script when the container starts
+ENTRYPOINT ["/bin/bash", "-c", "python3 /app/src/plex_generate_previews.py"]
+
+
+===== docs/README.md =====
+# [stevezau/plex_generate_vid_previews](https://github.com/stevezau/plex_generate_vid_previews/)
+
+## Table of Contents
+
+- [Known issues](#known-issues)
+- [Features](#features)
+- [Requirements](#requirements)
+- [Environment variables](#environment-variables)
+- [Guide for Docker](#guide-for-docker)
+- [Guide for running locally](#guide-for-running-locally)
+- [Guide for Unraid](#guide-for-unraid)
+- [FAQ, Support and Questions](#faq-support-and-questions)
+
+
+## Plex Preview Thumbnail Generator Overview
+
+This script is designed to speed up the process of generating preview thumbnails for your Plex media library. It
+utilizes multi-threaded processes and leverages NVIDIA/AMD GPUs and CPUs for maximum throughput.
+
+It supports
+- Accelerating preview thumbnail generation using GPU and multi-threaded CPU processing
+- Remote generation of previews for your Plex server
+- Customizable settings for thumbnail quality, frame interval, and more
+- Easy setup with Docker and Docker Compose
+
+## Known issues
+- AMD GPU Support was recently added, this is untested as i don't have an AMD GPU. Please log an issue if you find problems
+
+## Requirements
+
+- NVIDIA GPU + NVIDIA Container Toolkit (if using Docker)
+- AMC GPU + [amdgpu](https://github.com/ROCm/ROCm-docker/blob/master/quick-start.md) (if using Docker)
+- Plex Media Server
+
+## Environment variables
+
+You can customize various settings by modifying the environment variables. If you are running locally you can create
+a `.env` file
+
+|            Variables             | Function                                                                                                                                    |
+|:--------------------------------:|---------------------------------------------------------------------------------------------------------------------------------------------|
+|            \`PLEX_URL\`            | Plex server URL. (eg: http://localhost:32400)                                                                                               |
+|           \`PLEX_TOKEN\`           | Plex Token. ([click here for how to get a token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/)) |
+|    \`PLEX_BIF_FRAME_INTERVAL\`     | Interval between preview images (default: 5, plex default: 2)                                                                                      |
+|     \`PLEX_LOCAL_MEDIA_PATH\`      | Path to Plex Media folder (eg: /path_to/plex/Library/Application Support/Plex Media Server/Media)                                           |
+| \`THUMBNAIL_QUALITY\`              | Preview image quality (2-6, default: 4, plex default: 3). 2 being the highest quality and largest file size and 6 being the lowest quality and smallest file size.   |
+|           \`TMP_FOLDER\`           | Temp folder for image generation. (default: /dev/shm/plex_generate_previews)                                                                |
+|          \`PLEX_TIMEOUT\`          | Timeout for Plex API requests in seconds (default: 60). If you have a large library, you might need to increase the timeout.                |
+|          \`GPU_THREADS\`           | Number of GPU threads for preview generation (default: 4)                                                                                   |
+|          \`CPU_THREADS\`           | Number of CPU threads for preview generation (default: 4)                                                                                   |
+| \`PLEX_LOCAL_VIDEOS_PATH_MAPPING\` | Leave blank unless you need to map your local media files to a remote path (eg: '/path/this/script/sees/to/video/library')                  |
+|    \`PLEX_VIDEOS_PATH_MAPPING\`    | Leave blank unless you need to map your local media files to a remote path (eg: '/path/plex/sees/to/video/library')                         |
+|           \`LOG_LEVEL\`            | Set to debug for troubleshooting                                                                                                            |
+
+# Guide for Docker
+
+> [!IMPORTANT]  
+> Note the extra "z" in the Docker Hub url [stevezzau/plex_generate_vid_previews](https://hub.docker.com/repository/docker/stevezzau/plex_generate_vid_previews). 
+> stevezau was already taken on dockerhub.  
+
+## GPU Support
+### NVIDIA - Install NVIDIA Container Toolkit
+To enable GPU access inside the Docker container, you need to install the NVIDIA Container Toolkit on your host system.
+Follow the installation instructions for your distribution from the official NVIDIA
+documentation: [NVIDIA Container Toolkit Installation Guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)
+
+### AMD - Install AMDGPU support
+In order to access GPUs in a container explicit access to the GPUs must be granted.
+
+Please follow the steps outlined here [https://rocm.docs.amd.com/en/docs-5.0.2/deploy/docker.html](https://rocm.docs.amd.com/en/docs-5.0.2/deploy/docker.html)
+
+## docker-compose ([click here for more info](https://docs.linuxserver.io/general/docker-compose))
+
+\```yaml
+---
+version: '3'
+services:
+  previews:
+    image: stevezzau/plex_generate_vid_previews:latest
+    environment:
+      - PLEX_URL=https://xxxxxx.plex.direct:32400 
+      - PLEX_TOKEN=your-plex-token 
+      - PLEX_BIF_FRAME_INTERVAL=5
+      - THUMBNAIL_QUALITY=4
+      - PLEX_LOCAL_MEDIA_PATH=/path/to/plex/media
+      - TMP_FOLDER=/tmp/previews
+      - PLEX_TIMEOUT=60
+      - GPU_THREADS=5  
+      - CPU_THREADS=5
+    volumes:
+      - /path/to/plex/media:/path/to/plex/media
+      - /path/to/plex/videos:/videos
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    runtime: nvidia
+\```
+
+## docker cli ([click here for more info](https://docs.docker.com/engine/reference/commandline/cli/))
+
+> [!IMPORTANT]  
+> Note: If you are using AMD GPU, you'll need to modify the docker run command and remove NVIDIA add in AMD as per the instructions [here](https://rocm.docs.amd.com/en/docs-5.0.2/deploy/docker.html) 
+
+\```bash
+docker run -it --rm \
+  --name=plex_generate_vid_previews \
+  --runtime=nvidia \
+  -e NVIDIA_VISIBLE_DEVICES=all \
+  -e PUID=1000 \
+  -e PGID=1000 \
+  -e PLEX_URL='http://localhost:32400' \
+  -e PLEX_TOKEN='XXXXXX' \
+  -e PLEX_BIF_FRAME_INTERVAL=2 \
+  -e THUMBNAIL_QUALITY=4 \
+  -e PLEX_LOCAL_MEDIA_PATH='/config/plex/Library/Application Support/Plex Media Server/Media' \
+  -e GPU_THREADS=5 \
+  -e CPU_THREADS=5 \
+  -v /your/media/files:/your/media/files \
+  -v /plex/folder:/plex/folder \
+  stevezzau/plex_generate_vid_previews:latest
+\```
+
+# Guide for running locally
+
+## 1. Install Dependencies
+
+Make sure you have the following dependencies installed and available in your system's PATH:
+
+- FFmpeg: [Download FFmpeg](https://www.ffmpeg.org/download.html)
+- MediaInfo: [Download MediaInfo](https://mediaarea.net/fr/MediaInfo/Download)
+
+## 2. Clone the Repository
+
+Clone this repository to your local machine:
+
+\```bash
+git clone https://github.com/yourusername/plex-preview-thumbnail-generator.git
+cd plex-preview-thumbnail-generator
+pip3 install -r requirements.txt
+\```
+
+## 3. Configure Environment Variables
+
+Copy the `.env.example` file to `.env`:
+
+\```bash
+cp config/.env.example .env
+\```
+
+Open the `.env` file in a text editor and set the environment variables:
+
+## 4. Run
+
+Run the script
+
+\```bash
+python3 src/plex_generate_previews.py
+\```
+
+# Guide for Unraid
+
+**Note:** In this example, the server is named `server` for the network share on Windows, and the SMB share has user-accessible permissions to your media folder. This guide follows the [TRaSH Guide](https://trash-guides.info/) for folder naming structures & was done using the linuxserver plex docker image.
+
+## Steps
+
+1. **Add a Second Container Path:**
+   - In your Plex Docker container settings, add a second container path for `/server/media/`.
+   - Map the host path as you normally would (e.g., `/mnt/user/media/plex/`).
+
+2. **Update Plex Library Path Mappings:**
+   - Open Plex and delete all of your current library path mappings.
+   - Replace them with paths following this format (you must add a second `/` yourself, as Plex will only show the mount with one):  
+     `//server/media/plex/<name-of-media-folder>`.  
+     - Example: `//server/media/plex/tv`
+
+3. **Modify the Script's Environment File:**
+   - The script’s `.env` file only needs one specific adjustment for Unraid:
+     - Set `PLEX_LOCAL_MEDIA_PATH` as follows:  
+       \```plaintext
+       PLEX_LOCAL_MEDIA_PATH=\SERVERppdata\plex\Library\Application Support\Plex Media Server\Media
+       \```
+
+4. **Grant Script Permissions to the Media Folder:**
+   - In order for the script to write to the Media folder in the Plex appdata directory, you may need to adjust the permissions.
+   - I used the following command in the Unraid console:  
+     \```bash
+     chmod -R 777 /mnt/cache/appdata/plex/Library/Application\ Support/Plex\ Media\ Server/Media/
+     \```
+
+5. **Run the Script:**
+   - After running the script, your GPU should begin working.
+   - **Note:**  The script may appear to be frozen on 0 files, but you can still see thumbnails being created in the temporary folder you specified, and it should eventually start to update in your terminal.
+
+# FAQ, Support and Questions
+
+If you have any questions or need support, please create a GitHub issue in this repository
+
+Feel free to contribute to this project by submitting pull requests or reporting issues.
+
+## Skipping as file not found?
+If you are getting this error it could be:
+1. If you're using docker, you haven't mapped the folder into docker correctly. Please check before opening an issue.
+2. If you are running on Windows and using a mapped drive, this can cause issues with python, please use UNC \\<server>\\your\media\path instead (see [#52](https://github.com/stevezau/plex_generate_vid_previews/issues/52))
+
+
+===== src/plex/generator.py =====
+# src/plex/generator.py
+
+import os
+import re
+import subprocess
+import shutil
+import glob
+import sys
+import struct
+import time
+from pathlib import Path
+from concurrent.futures import ProcessPoolExecutor
+
+import requests
+from plexapi.server import PlexServer
+from pymediainfo import MediaInfo
+import gpustat
+
+from src.config.settings import settings
+from src.config.logger import logger
+from src.metrics.db import insert_metric
+
+FFMPEG_PATH = shutil.which("ffmpeg")
+if not FFMPEG_PATH:
+    logger.error('FFmpeg not found. Please install FFmpeg and ensure it is in your PATH.')
+    sys.exit(1)
+
+class PlexPreviewGenerator:
+    def __init__(self):
+        self.plex = self._connect_plex()
+
+    def _connect_plex(self):
+        """Connect to the Plex server."""
+        sess = requests.Session()
+        sess.verify = False
+        try:
+            plex = PlexServer(settings.PLEX_URL, settings.PLEX_TOKEN, timeout=settings.PLEX_TIMEOUT, session=sess)
+            logger.info('Successfully connected to Plex server.')
+            return plex
+        except Exception as e:
+            logger.error(f'Failed to connect to Plex Server: {e}')
+            sys.exit(1)
+
+    def detect_gpu(self):
+        """Detect available GPUs (NVIDIA or AMD)."""
+        # Detect NVIDIA GPUs
+        try:
+            import pynvml
+            pynvml.nvmlInit()
+            num_nvidia_gpus = pynvml.nvmlDeviceGetCount()
+            pynvml.nvmlShutdown()
+            if num_nvidia_gpus > 0:
+                logger.info(f'Detected {num_nvidia_gpus} NVIDIA GPU(s).')
+                return 'NVIDIA'
+        except ImportError:
+            logger.warning("NVIDIA GPU detection library (pynvml) not found.")
+        except Exception as e:
+            logger.warning(f"Error detecting NVIDIA GPUs: {e}")
+
+        # Detect AMD GPUs
+        try:
+            from amdsmi import amdsmi_interface
+            amdsmi_interface.amdsmi_init()
+            devices = amdsmi_interface.amdsmi_get_processor_handles()
+            found = False
+            for device in devices:
+                processor_type = amdsmi_interface.amdsmi_get_processor_type(device)
+                if processor_type == amdsmi_interface.AMDSMI_PROCESSOR_TYPE_GPU:
+                    found = True
+                    break
+            amdsmi_interface.amdsmi_shut_down()
+            if found:
+                vaapi_device_dir = "/dev/dri"
+                if os.path.exists(vaapi_device_dir):
+                    for entry in os.listdir(vaapi_device_dir):
+                        if entry.startswith("renderD"):
+                            logger.info(f'Detected AMD GPU device at {os.path.join(vaapi_device_dir, entry)}.')
+                            return os.path.join(vaapi_device_dir, entry)
+        except ImportError:
+            logger.warning("AMD GPU detection library (amdsmi) not found.")
+        except Exception as e:
+            logger.warning(f"Error detecting AMD GPUs: {e}")
+
+        logger.warning('No GPUs detected. Defaulting to CPU only.')
+        return None
+
+    def get_amd_ffmpeg_processes(self):
+        """Retrieve running ffmpeg processes on AMD GPUs."""
+        from amdsmi import amdsmi_interface
+        try:
+            amdsmi_interface.amdsmi_init()
+            gpu_handles = amdsmi_interface.amdsmi_get_processor_handles()
+            ffmpeg_processes = []
+
+            for gpu in gpu_handles:
+                processes = amdsmi_interface.amdsmi_get_gpu_process_list(gpu)
+                for process in processes:
+                    if process['name'].lower().startswith('ffmpeg'):
+                        ffmpeg_processes.append(process)
+
+            return ffmpeg_processes
+        finally:
+            amdsmi_interface.amdsmi_shut_down()
+
+    def generate_images(self, video_file: str, output_folder: str, gpu: str):
+        """Generate preview images using FFmpeg."""
+        media_info = MediaInfo.parse(video_file)
+        vf_parameters = f"fps=fps={round(1 / settings.PLEX_BIF_FRAME_INTERVAL, 6)},scale=w=320:h=240:force_original_aspect_ratio=decrease"
+
+        # Adjust parameters for HDR formats
+        if media_info.video_tracks:
+            if media_info.video_tracks[0].hdr_format not in [None, "None"]:
+                vf_parameters = (
+                    f"fps=fps={round(1 / settings.PLEX_BIF_FRAME_INTERVAL, 6)},"
+                    "zscale=t=linear:npl=100,format=gbrpf32le,"
+                    "zscale=p=bt709,tonemap=tonemap=hable:desat=0,"
+                    "zscale=t=bt709:m=bt709:r=tv,format=yuv420p,"
+                    "scale=w=320:h=240:force_original_aspect_ratio=decrease"
+                )
+
+        args = [
+            FFMPEG_PATH, "-loglevel", "info", "-skip_frame:v", "nokey",
+            "-threads:0", "1", "-i", video_file, "-an", "-sn", "-dn",
+            "-q:v", str(settings.THUMBNAIL_QUALITY),
+            "-vf", vf_parameters,
+            f'{output_folder}/img-%06d.jpg'
+        ]
+
+        start_time = time.time()
+        hw_accel_used = False
+
+        if gpu == 'NVIDIA':
+            gpu_stats = gpustat.new_query()
+            ffmpeg_count = sum(1 for gpu_stat in gpu_stats for process in gpu_stat.processes if 'ffmpeg' in process.command.lower())
+            logger.debug(f'FFmpeg GPU threads running: {ffmpeg_count}')
+            if ffmpeg_count < settings.GPU_THREADS or settings.CPU_THREADS == 0:
+                hw_accel_used = True
+                args.insert(5, "-hwaccel")
+                args.insert(6, "cuda")
+        elif gpu:
+            ffmpeg_processes = self.get_amd_ffmpeg_processes()
+            logger.debug(f'FFmpeg GPU threads running: {len(ffmpeg_processes)}')
+            if len(ffmpeg_processes) < settings.GPU_THREADS or settings.CPU_THREADS == 0:
+                hw_accel_used = True
+                args.extend(["-hwaccel", "vaapi", "-vaapi_device", gpu])
+                # Adjust vf_parameters for AMD VAAPI
+                vf_parameters = vf_parameters.replace(
+                    "scale=w=320:h=240:force_original_aspect_ratio=decrease",
+                    "format=nv12|vaapi,hwupload,scale_vaapi=w=320:h=240:force_original_aspect_ratio=decrease"
+                )
+                args[args.index("-vf") + 1] = vf_parameters
+
+        logger.debug(f'Running FFmpeg command: {" ".join(args)}')
+        proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        # Allow FFmpeg to start
+        time.sleep(1)
+
+        out, err = proc.communicate()
+        if proc.returncode != 0:
+            err_lines = err.decode('utf-8', 'ignore').split('\n')[-5:]
+            logger.error(f'Error generating images for {video_file}: {err_lines}')
+            return
+
+        logger.debug('FFmpeg command output:')
+        logger.debug(out)
+
+        end_time = time.time()
+        duration = round(end_time - start_time, 1)
+        speed_matches = re.findall(r'speed= ?([0-9]+\.?[0-9]*|\.[0-9]+)x', err.decode('utf-8', 'ignore'))
+        speed = float(speed_matches[-1]) if speed_matches else 1.0
+
+        # Rename images
+        for image in glob.glob(f'{output_folder}/img*.jpg'):
+            frame_no = int(os.path.basename(image).strip('img-').strip('.jpg')) - 1
+            frame_second = frame_no * settings.PLEX_BIF_FRAME_INTERVAL
+            os.rename(image, os.path.join(output_folder, f'{frame_second:010d}.jpg'))
+
+        logger.info(f'Generated Video Preview for {video_file} | HW Accel: {hw_accel_used} | Time: {duration}s | Speed: {speed}x')
+        insert_metric(video_file, hw_accel_used, duration, speed)
+
+    def generate_bif(self, bif_filename: str, images_path: str):
+        """Build a .bif file from generated images."""
+        magic = [0x89, 0x42, 0x49, 0x46, 0x0d, 0x0a, 0x1a, 0x0a]
+        version = 0
+
+        images = sorted([img for img in os.listdir(images_path) if img.endswith('.jpg')])
+
+        with open(bif_filename, "wb") as f:
+            f.write(bytearray(magic))
+            f.write(struct.pack("<I", version))
+            f.write(struct.pack("<I", len(images)))
+            f.write(struct.pack("<I", 1000 * settings.PLEX_BIF_FRAME_INTERVAL))
+            f.write(bytes([0x00] * 56))  # Padding to reach 64 bytes
+
+            bif_table_size = 8 + (8 * len(images))
+            image_index = 64 + bif_table_size
+            timestamp = 0
+
+            for image in images:
+                image_path = os.path.join(images_path, image)
+                statinfo = os.stat(image_path)
+                f.write(struct.pack("<I", timestamp))
+                f.write(struct.pack("<I", image_index))
+                timestamp += 1
+                image_index += statinfo.st_size
+
+            f.write(struct.pack("<I", 0xffffffff))
+            f.write(struct.pack("<I", image_index))
+
+            for image in images:
+                image_path = os.path.join(images_path, image)
+                with open(image_path, "rb") as img_f:
+                    f.write(img_f.read())
+
+    def sanitize_path(self, path: str) -> str:
+        """Sanitize file paths based on operating system."""
+        return path.replace('\\', '/') if os.name == 'nt' else path
+
+    def process_item(self, item_key: str, gpu: str):
+        """Process a single Plex media item to generate previews."""
+        data = self.plex.query(f'{item_key}/tree')
+
+        for media_part in data.findall('.//MediaPart'):
+            if 'hash' not in media_part.attrib:
+                continue
+
+            # Optional filtering by file path
+            if len(sys.argv) > 1 and sys.argv[1] not in media_part.attrib['file']:
+                continue
+
+            bundle_hash = media_part.attrib['hash']
+            media_file = self.sanitize_path(media_part.attrib['file'].replace(
+                settings.PLEX_VIDEOS_PATH_MAPPING, settings.PLEX_LOCAL_VIDEOS_PATH_MAPPING
+            ))
+
+            if not os.path.isfile(media_file):
+                logger.error(f'Skipping as file not found: {media_file}')
+                continue
+
+            try:
+                bundle_file = f"{bundle_hash[0]}/{bundle_hash[1:]}.bundle"
+            except Exception as e:
+                logger.error(f'Error generating bundle file for {media_file}: {e}')
+                continue
+
+            bundle_path = self.sanitize_path(os.path.join(settings.PLEX_LOCAL_MEDIA_PATH, 'localhost', bundle_file))
+            indexes_path = self.sanitize_path(os.path.join(bundle_path, 'Contents', 'Indexes'))
+            index_bif = self.sanitize_path(os.path.join(indexes_path, 'index-sd.bif'))
+            tmp_path = self.sanitize_path(os.path.join(settings.TMP_FOLDER, bundle_hash))
+
+            if not os.path.isfile(index_bif):
+                logger.debug(f'Generating bundle file for {media_file} at {index_bif}')
+
+                os.makedirs(indexes_path, exist_ok=True)
+                os.makedirs(tmp_path, exist_ok=True)
+
+                try:
+                    self.generate_images(media_file, tmp_path, gpu)
+                except Exception as e:
+                    logger.error(f'Error generating images for {media_file}: {e}')
+                    shutil.rmtree(tmp_path, ignore_errors=True)
+                    continue
+
+                try:
+                    self.generate_bif(index_bif, tmp_path)
+                except Exception as e:
+                    if os.path.exists(index_bif):
+                        os.remove(index_bif)
+                    logger.error(f'Error generating BIF for {media_file}: {e}')
+                    continue
+                finally:
+                    shutil.rmtree(tmp_path, ignore_errors=True)
+
+    def run(self, gpu: str):
+        """Run the preview generation process for all media in Plex libraries."""
+        for section in self.plex.library.sections():
+            logger.info(f"Processing library: '{section.title}'")
+
+            if section.type == 'episode':
+                media = [m.key for m in section.search(libtype='episode')]
+            elif section.type == 'movie':
+                media = [m.key for m in section.search()]
+            else:
+                logger.info(f"Skipping unsupported library type '{section.type}' in library '{section.title}'.")
+                continue
+
+            logger.info(f"Found {len(media)} media file(s) in library '{section.title}'.")
+
+            with ProcessPoolExecutor(max_workers=settings.CPU_THREADS + settings.GPU_THREADS) as executor:
+                futures = [executor.submit(self.process_item, key, gpu) for key in media]
+                for future in futures:
+                    try:
+                        future.result()
+                    except Exception as e:
+                        logger.error(f"Error processing media item: {e}")
+
+
+===== src/plex/__init__.py =====
+
+
+===== src/metrics/webserver.py =====
+# src/metrics/webserver.py
+
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from src.metrics.db import get_latest_metrics, init_db
+from pathlib import Path
+
+app = FastAPI()
+templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
+
+@app.on_event("startup")
+def startup_event():
+    """Initialize the database on startup."""
+    init_db()
+
+@app.get("/", response_class=HTMLResponse)
+def read_metrics(request: Request):
+    """Render the latest metrics on the homepage."""
+    metrics = get_latest_metrics()
+    return templates.TemplateResponse("metrics.html", {"request": request, "metrics": metrics})
+
+def run_webserver():
+    """Run the FastAPI webserver using Uvicorn."""
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+===== src/metrics/db.py =====
+# src/metrics/db.py
+
+import sqlite3
+from pathlib import Path
+from typing import List, Tuple
+from src.config.settings import settings
+
+DB_PATH = Path(__file__).resolve().parent.parent / "metrics.db"
+
+def init_db():
+    """Initialize the SQLite database and create tables if they don't exist."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS metrics (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            video_file TEXT NOT NULL,
+            hw_accel BOOLEAN NOT NULL,
+            time_seconds REAL NOT NULL,
+            speed REAL NOT NULL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+def insert_metric(video_file: str, hw_accel: bool, time_seconds: float, speed: float):
+    """Insert a new metric into the database."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO metrics (video_file, hw_accel, time_seconds, speed)
+        VALUES (?, ?, ?, ?)
+    ''', (video_file, hw_accel, time_seconds, speed))
+    conn.commit()
+    conn.close()
+
+def get_latest_metrics(limit: int = 100) -> List[Tuple]:
+    """Retrieve the latest metrics from the database."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM metrics ORDER BY timestamp DESC LIMIT ?', (limit,))
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
+===== src/metrics/__init__.py =====
+
+
+===== src/metrics/templates/metrics.html =====
+<!-- src/metrics/templates/metrics.html -->
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Plex Preview Generation Metrics</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        th { background-color: #f2f2f2; }
+        tr:nth-child(even){background-color: #f9f9f9;}
+    </style>
+</head>
+<body>
+    <h1>Plex Preview Generation Metrics</h1>
+    <table>
+        <tr>
+            <th>ID</th>
+            <th>Video File</th>
+            <th>Hardware Accel</th>
+            <th>Time (s)</th>
+            <th>Speed (x)</th>
+            <th>Timestamp</th>
+        </tr>
+        {% for metric in metrics %}
+        <tr>
+            <td>{{ metric[0] }}</td>
+            <td>{{ metric[1] }}</td>
+            <td>{{ "Yes" if metric[2] else "No" }}</td>
+            <td>{{ metric[3] }}</td>
+            <td>{{ metric[4] }}</td>
+            <td>{{ metric[5] }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
+
+
+===== src/config/__init__.py =====
+
+
+===== src/config/settings.py =====
+# src/config/settings.py
+
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / '.env')
+
+class Settings:
+    # Plex Configuration
+    PLEX_URL = os.getenv('PLEX_URL', '')
+    PLEX_TOKEN = os.getenv('PLEX_TOKEN', '')
+    PLEX_BIF_FRAME_INTERVAL = int(os.getenv('PLEX_BIF_FRAME_INTERVAL', 5))
+    THUMBNAIL_QUALITY = int(os.getenv('THUMBNAIL_QUALITY', 4))
+    PLEX_LOCAL_MEDIA_PATH = os.getenv('PLEX_LOCAL_MEDIA_PATH', '/path_to/plex/Library/Application Support/Plex Media Server/Media')
+    TMP_FOLDER = os.getenv('TMP_FOLDER', '/dev/shm/plex_generate_previews')
+    PLEX_TIMEOUT = int(os.getenv('PLEX_TIMEOUT', 60))
+    PLEX_LOCAL_VIDEOS_PATH_MAPPING = os.getenv('PLEX_LOCAL_VIDEOS_PATH_MAPPING', '')
+    PLEX_VIDEOS_PATH_MAPPING = os.getenv('PLEX_VIDEOS_PATH_MAPPING', '')
+    GPU_THREADS = int(os.getenv('GPU_THREADS', 4))
+    CPU_THREADS = int(os.getenv('CPU_THREADS', 4))
+    LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
+
+settings = Settings()
+
+
+===== src/config/logger.py =====
+# src/config/logger.py
+
+from loguru import logger
+from rich.console import Console
+from src.config.settings import settings
+
+# Initialize Rich console
+console = Console()
+
+# Remove default logger
+logger.remove()
+
+# Add new logger with Rich formatting
+logger.add(
+    lambda msg: console.print(msg, end=''),
+    level=settings.LOG_LEVEL,
+    format="<green>{time:YYYY/MM/DD HH:mm:ss}</green> | {level.icon} - <level>{message}</level>",
+    enqueue=True
+)
+
+
+===== .devcontainer/Dockerfile.dev =====
+# Use the same base image as your production Dockerfile
+FROM linuxserver/ffmpeg:7.0.1
+
+# Install Python, pip, and other dependencies
+RUN apt-get update && apt-get install -y \
+    mediainfo \
+    software-properties-common \
+    gcc \
+    musl-dev \
+    python3 \
+    python3-pip \
+    git \
+    vim \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Copy the requirements.txt file and install Python dependencies
+COPY requirements.txt .
+RUN pip3 install --user -r requirements.txt
+
+# Install additional development tools if needed
+# For example, install pylint for linting
+RUN pip3 install --user pylint
+
+# Ensure the Python user base binary directory is in PATH
+ENV PATH="/root/.local/bin:${PATH}"
+
+# Copy the rest of the application code
+COPY src/ ./src
+COPY config/.env.example .env.example
+
+# Set environment variables (optional)
+# ENV PLEX_URL=http://localhost:32400
+# ENV PLEX_TOKEN=your_token_here
+
+# Set the default command to bash for an interactive terminal
+CMD ["/bin/bash"]
+
+
+===== .devcontainer/devcontainer.json =====
+{
+    "name": "Plex Generate Previews Dev Container",
+    "build": {
+        "dockerfile": "Dockerfile.dev",
+        "context": ".."
+    },
+    "settings": {
+        "python.pythonPath": "/usr/bin/python3",
+        "terminal.integrated.shell.linux": "/bin/bash"
+    },
+    "extensions": [
+        "ms-python.python",
+        "ms-azuretools.vscode-docker"
+    ],
+    "postCreateCommand": "pip install --user -r requirements.txt",
+    "remoteUser": "root"
+}
+
+
+===== .github/workflows/docker-image.yml =====
+name: Publish Docker image
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  push_to_registry:
+    name: Push Docker image to Docker Hub
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: stevezzau/plex_generate_vid_previews
+          tags: |
+            type=ref,event=branch
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./docker
+          file: ./docker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+
+===== logs/app.log =====
+
+
+===== scripts/merge.py =====
+"""
+merge.py
+
+This script merges all files from the current repository into a single file named 'merged_repository.txt'.
+At the beginning of the merged file, it includes the file and folder structure of the repository.
+Each file's content is preceded by a header containing its relative path.
+
+Folders specified in the EXCLUDED_DIRS list (e.g., '.git', '.build') will be excluded from the merge.
+
+Usage:
+    python merge.py
+"""
+
+import os
+
+# List of directories to exclude from the merge
+EXCLUDED_DIRS = {'.git', '.build', 'merge.py'}  # Use a set for faster lookups
+
+def get_file_structure(root_dir=".", excluded_dirs=None):
+    """
+    Traverse the directory tree and collect the relative paths of all files,
+    excluding specified directories.
+
+    Args:
+        root_dir (str): The root directory to start traversal.
+        excluded_dirs (set): A set of directory names to exclude.
+
+    Returns:
+        list: A list of relative file paths.
+    """
+    if excluded_dirs is None:
+        excluded_dirs = set()
+
+    structure = []
+    for root, dirs, files in os.walk(root_dir):
+        # Modify 'dirs' in-place to exclude specified directories
+        dirs[:] = [d for d in dirs if d not in excluded_dirs]
+
+        for file in files:
+            # Skip the output file to prevent recursion
+            if file == "merged_repository.txt":
+                continue
+            filepath = os.path.join(root, file)
+            # Normalize the path to use forward slashes
+            normalized_path = os.path.normpath(filepath).replace(os.sep, "/")
+            structure.append(normalized_path)
+    return structure
+
+def merge_files(file_structure, output_file="merged_repository.txt"):
+    """
+    Merge the contents of all files into a single output file with headers.
+
+    Args:
+        file_structure (list): A list of file paths to merge.
+        output_file (str): The name of the output merged file.
+    """
+    with open(output_file, "w", encoding="utf-8") as outfile:
+        # Write the file and folder structure
+        outfile.write("File and Folder Structure:\n")
+        outfile.write("===========================\n")
+        for filepath in file_structure:
+            outfile.write(f"{filepath}\n")
+        outfile.write("\n\n")
+
+        # Write each file's content with a header
+        for filepath in file_structure:
+            outfile.write(f"===== {filepath} =====\n")
+            try:
+                with open(filepath, "r", encoding="utf-8") as infile:
+                    content = infile.read()
+            except UnicodeDecodeError:
+                # If the file is binary or has a different encoding, read in binary mode
+                with open(filepath, "rb") as infile:
+                    content = infile.read()
+                    # Represent binary content in a readable format
+                    content = content.decode("utf-8", errors="replace")
+            outfile.write(content)
+            outfile.write("\n\n")  # Add spacing between files
+
+def main():
+    # Define the output file name
+    output_filename = "merged_repository.txt"
+
+    # Get the file structure, excluding specified directories
+    file_structure = get_file_structure(excluded_dirs=EXCLUDED_DIRS)
+
+    # Merge the files into the output file
+    merge_files(file_structure, output_file=output_filename)
+
+    print(f"All files have been merged into '{output_filename}'.")
+    if EXCLUDED_DIRS:
+        excluded = ", ".join(EXCLUDED_DIRS)
+        print(f"Excluded directories: {excluded}")
+
+if __name__ == "__main__":
+    main()
+
+
+===== config/.env.example =====
+PLEX_URL=https://xxxxxx.plex.direct:32400/
+PLEX_TOKEN=xxxxxx  
+PLEX_BIF_FRAME_INTERVAL=5
+THUMBNAIL_QUALITY=4
+PLEX_LOCAL_MEDIA_PATH=/path_to/plex/Library/Application Support/Plex Media Server/Media
+TMP_FOLDER=/dev/shm/plex_generate_previews
+PLEX_TIMEOUT=60
+PLEX_LOCAL_VIDEOS_PATH_MAPPING=/path/this/script/sees/to/video/library
+PLEX_VIDEOS_PATH_MAPPING=/path/plex/sees/to/video/library
+GPU_THREADS=4
+CPU_THREADS=0
+LOG_LEVEL=INFO
+
+

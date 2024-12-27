@@ -39,18 +39,18 @@ a `.env` file
 
 |            Variables             | Function                                                                                                                                    |
 |:--------------------------------:|---------------------------------------------------------------------------------------------------------------------------------------------|
-|            `PLEX_URL`            | Plex server URL. (eg: http://localhost:32400)                                                                                               |
-|           `PLEX_TOKEN`           | Plex Token. ([click here for how to get a token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/)) |
-|    `PLEX_BIF_FRAME_INTERVAL`     | Interval between preview images (default: 5, plex default: 2)                                                                                      |
-|     `PLEX_LOCAL_MEDIA_PATH`      | Path to Plex Media folder (eg: /path_to/plex/Library/Application Support/Plex Media Server/Media)                                           |
-| `THUMBNAIL_QUALITY`              | Preview image quality (2-6, default: 4, plex default: 3). 2 being the highest quality and largest file size and 6 being the lowest quality and smallest file size.   |
-|           `TMP_FOLDER`           | Temp folder for image generation. (default: /dev/shm/plex_generate_previews)                                                                |
-|          `PLEX_TIMEOUT`          | Timeout for Plex API requests in seconds (default: 60). If you have a large library, you might need to increase the timeout.                |
-|          `GPU_THREADS`           | Number of GPU threads for preview generation (default: 4)                                                                                   |
-|          `CPU_THREADS`           | Number of CPU threads for preview generation (default: 4)                                                                                   |
-| `PLEX_LOCAL_VIDEOS_PATH_MAPPING` | Leave blank unless you need to map your local media files to a remote path (eg: '/path/this/script/sees/to/video/library')                  |
-|    `PLEX_VIDEOS_PATH_MAPPING`    | Leave blank unless you need to map your local media files to a remote path (eg: '/path/plex/sees/to/video/library')                         |
-|           `LOG_LEVEL`            | Set to debug for troubleshooting                                                                                                            |
+|            \`PLEX_URL\`            | Plex server URL. (eg: http://localhost:32400)                                                                                               |
+|           \`PLEX_TOKEN\`           | Plex Token. ([click here for how to get a token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/)) |
+|    \`PLEX_BIF_FRAME_INTERVAL\`     | Interval between preview images (default: 5, plex default: 2)                                                                                      |
+|     \`PLEX_LOCAL_MEDIA_PATH\`      | Path to Plex Media folder (eg: /path_to/plex/Library/Application Support/Plex Media Server/Media)                                           |
+| \`THUMBNAIL_QUALITY\`              | Preview image quality (2-6, default: 4, plex default: 3). 2 being the highest quality and largest file size and 6 being the lowest quality and smallest file size.   |
+|           \`TMP_FOLDER\`           | Temp folder for image generation. (default: /dev/shm/plex_generate_previews)                                                                |
+|          \`PLEX_TIMEOUT\`          | Timeout for Plex API requests in seconds (default: 60). If you have a large library, you might need to increase the timeout.                |
+|          \`GPU_THREADS\`           | Number of GPU threads for preview generation (default: 4)                                                                                   |
+|          \`CPU_THREADS\`           | Number of CPU threads for preview generation (default: 4)                                                                                   |
+| \`PLEX_LOCAL_VIDEOS_PATH_MAPPING\` | Leave blank unless you need to map your local media files to a remote path (eg: '/path/this/script/sees/to/video/library')                  |
+|    \`PLEX_VIDEOS_PATH_MAPPING\`    | Leave blank unless you need to map your local media files to a remote path (eg: '/path/plex/sees/to/video/library')                         |
+|           \`LOG_LEVEL\`            | Set to debug for troubleshooting                                                                                                            |
 
 # Guide for Docker
 
@@ -71,7 +71,7 @@ Please follow the steps outlined here [https://rocm.docs.amd.com/en/docs-5.0.2/d
 
 ## docker-compose ([click here for more info](https://docs.linuxserver.io/general/docker-compose))
 
-```yaml
+\```yaml
 ---
 version: '3'
 services:
@@ -96,14 +96,14 @@ services:
           devices:
             - capabilities: [gpu]
     runtime: nvidia
-```
+\```
 
 ## docker cli ([click here for more info](https://docs.docker.com/engine/reference/commandline/cli/))
 
 > [!IMPORTANT]  
 > Note: If you are using AMD GPU, you'll need to modify the docker run command and remove NVIDIA add in AMD as per the instructions [here](https://rocm.docs.amd.com/en/docs-5.0.2/deploy/docker.html) 
 
-```bash
+\```bash
 docker run -it --rm \
   --name=plex_generate_vid_previews \
   --runtime=nvidia \
@@ -120,7 +120,7 @@ docker run -it --rm \
   -v /your/media/files:/your/media/files \
   -v /plex/folder:/plex/folder \
   stevezzau/plex_generate_vid_previews:latest
-```
+\```
 
 # Guide for running locally
 
@@ -135,19 +135,19 @@ Make sure you have the following dependencies installed and available in your sy
 
 Clone this repository to your local machine:
 
-```bash
+\```bash
 git clone https://github.com/yourusername/plex-preview-thumbnail-generator.git
 cd plex-preview-thumbnail-generator
 pip3 install -r requirements.txt
-```
+\```
 
 ## 3. Configure Environment Variables
 
 Copy the `.env.example` file to `.env`:
 
-```bash
-cp .env.example .env
-```
+\```bash
+cp config/.env.example .env
+\```
 
 Open the `.env` file in a text editor and set the environment variables:
 
@@ -155,9 +155,9 @@ Open the `.env` file in a text editor and set the environment variables:
 
 Run the script
 
-```
-python3 plex_preview_thumbnail_generator.py
-````
+\```bash
+python3 src/plex_generate_previews.py
+\```
 
 # Guide for Unraid
 
@@ -166,7 +166,7 @@ python3 plex_preview_thumbnail_generator.py
 ## Steps
 
 1. **Add a Second Container Path:**
-   - In your Plex Docker container settings, add a second container path for `/server/media/plex/`.
+   - In your Plex Docker container settings, add a second container path for `/server/media/`.
    - Map the host path as you normally would (e.g., `/mnt/user/media/plex/`).
 
 2. **Update Plex Library Path Mappings:**
@@ -178,21 +178,20 @@ python3 plex_preview_thumbnail_generator.py
 3. **Modify the Script's Environment File:**
    - The script’s `.env` file only needs one specific adjustment for Unraid:
      - Set `PLEX_LOCAL_MEDIA_PATH` as follows:  
-       ```plaintext
-       PLEX_LOCAL_MEDIA_PATH=\\SERVER\appdata\plex\Library\Application Support\Plex Media Server\Media
-       ```
+       \```plaintext
+       PLEX_LOCAL_MEDIA_PATH=\SERVERppdata\plex\Library\Application Support\Plex Media Server\Media
+       \```
 
 4. **Grant Script Permissions to the Media Folder:**
    - In order for the script to write to the Media folder in the Plex appdata directory, you may need to adjust the permissions.
    - I used the following command in the Unraid console:  
-     ```bash
+     \```bash
      chmod -R 777 /mnt/cache/appdata/plex/Library/Application\ Support/Plex\ Media\ Server/Media/
-     ```
+     \```
 
 5. **Run the Script:**
    - After running the script, your GPU should begin working.
    - **Note:**  The script may appear to be frozen on 0 files, but you can still see thumbnails being created in the temporary folder you specified, and it should eventually start to update in your terminal.
-
 
 # FAQ, Support and Questions
 

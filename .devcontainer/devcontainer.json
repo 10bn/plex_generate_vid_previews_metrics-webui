@@ -1,0 +1,17 @@
+{
+    "name": "Plex Generate Previews Dev Container",
+    "build": {
+        "dockerfile": "Dockerfile.dev",
+        "context": ".."
+    },
+    "settings": {
+        "python.pythonPath": "/usr/bin/python3",
+        "terminal.integrated.shell.linux": "/bin/bash"
+    },
+    "extensions": [
+        "ms-python.python",
+        "ms-azuretools.vscode-docker"
+    ],
+    "postCreateCommand": "pip install --user -r requirements.txt",
+    "remoteUser": "root"
+}
